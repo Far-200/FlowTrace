@@ -57,7 +57,7 @@ It feels like having a debugger — except built for learning, not production.
 
 ## Screenshots
 
-> _(Replace these placeholders with actual screenshots)_
+> _(Coming soon)_
 
 | Desktop — Execution in progress     | Mobile — Variables tab             |
 | ----------------------------------- | ---------------------------------- |
