@@ -1,0 +1,314 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+/* ── CRITICAL: dark bg at every level, kills Monaco white flash ── */
+html,
+body {
+  background: #0a0c10;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  height: 100%;
+}
+
+#root {
+  background: #0a0c10;
+  height: 100%;
+}
+
+/* Monaco's own iframes and shadow containers */
+.monaco-editor,
+.monaco-editor-background,
+.monaco-editor .margin,
+.monaco-editor .monaco-editor-background {
+  background-color: #1e1e1e !important;
+}
+
+/* ── Reset ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  color: #e2e8f0;
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111318;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2f3d;
+  border-radius: 3px;
+}
+
+/* ── Panels ── */
+.panel {
+  background: #0d1117;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.panel-header {
+  background: #111827;
+  border-bottom: 1px solid #1f2937;
+  padding: 10px 16px;
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Buttons ── */
+.btn {
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 9px 16px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  webkittaphighlightcolor: transparent;
+}
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.35);
+}
+.btn-primary:hover {
+  background: #60a5fa;
+  box-shadow: 0 0 24px rgba(59, 130, 246, 0.5);
+}
+.btn-danger {
+  background: #1e293b;
+  color: #f87171;
+  border: 1px solid #374151;
+}
+.btn-danger:hover {
+  background: #2d1b1b;
+  border-color: #f87171;
+}
+.btn-success {
+  background: #064e3b;
+  color: #34d399;
+  border: 1px solid #065f46;
+}
+.btn-success:hover {
+  background: #065f46;
+}
+.btn-stop {
+  background: #7c2d12;
+  color: #fdba74;
+  border: 1px solid #9a3412;
+}
+.btn-stop:hover {
+  background: #9a3412;
+}
+.btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ── Sample buttons ── */
+.sample-btn {
+  background: #111827;
+  border: 1px solid #1f2937;
+  color: #9ca3af;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: "JetBrains Mono", monospace;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.sample-btn:hover {
+  border-color: #374151;
+  color: #e2e8f0;
+}
+.sample-btn.active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
+/* ── Progress bar ── */
+.progress-bar {
+  height: 3px;
+  background: #1f2937;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.3s ease;
+}
+
+/* ── Variable pills ── */
+.var-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 5px;
+  transition: all 0.2s ease;
+}
+.var-pill.changed {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  animation: pulse-border 0.4s ease;
+}
+@keyframes pulse-border {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+}
+.var-name {
+  color: #a78bfa;
+  font-size: 12px;
+  font-weight: 600;
+}
+.var-val {
+  color: #34d399;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ── Note badge ── */
+.note-badge {
+  font-size: 11px;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 4px;
+  padding: 3px 8px;
+  margin-top: 2px;
+  display: inline-block;
+}
+
+/* ── Monaco decoration classes ── */
+.ft-active-line {
+  background: rgba(59, 130, 246, 0.13) !important;
+}
+.ft-active-border {
+  background: #3b82f6 !important;
+  width: 3px !important;
+  margin-left: 2px;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+}
+.ft-active-glyph::before {
+  content: "▶";
+  color: #3b82f6;
+  font-size: 10px;
+  margin-left: 4px;
+  text-shadow: 0 0 6px rgba(59, 130, 246, 0.8);
+}
+.ft-dim-line {
+  opacity: 0.4;
+}
+
+/* ── Animations ── */
+@keyframes ft-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
+}
+@keyframes ft-var-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6);
+  }
+  60% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+/* ── Mobile ── */
+@media (max-width: 767px) {
+  .panel-header {
+    padding: 8px 12px;
+    font-size: 10px;
+  }
+  .var-pill {
+    padding: 8px 10px;
+    margin: 3px;
+  }
+  .var-name {
+    font-size: 11px;
+  }
+  .var-val {
+    font-size: 13px;
+  }
+  .sample-btn {
+    padding: 7px 12px;
+    font-size: 11px;
+  }
+
+  /* Make Monaco usable on mobile */
+  .monaco-editor {
+    min-width: 0 !important;
+  }
+}
+
+/* ── Tablet ── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .btn {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  .var-pill {
+    padding: 8px 10px;
+  }
+}
+
+/* ── Safe area (iPhone notch) ── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
