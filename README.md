@@ -316,6 +316,7 @@ Please open an issue before submitting a large PR.
 ## License
 
 MIT License — free to use, modify, and distribute.
+Just..........credit the original author🫠
 
 ---
 
