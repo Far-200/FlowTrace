@@ -318,6 +318,8 @@ Please open an issue before submitting a large PR.
 MIT License — free to use, modify, and distribute.
 Just..........credit the original author🫠
 
+Also, any criticism and suggestions are welcome🥹
+
 ---
 
 _FlowTrace is a portfolio and learning project. It is not affiliated with any compiler toolchain or IDE vendor._
