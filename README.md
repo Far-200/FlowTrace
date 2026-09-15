@@ -2,19 +2,25 @@
 
 **A step-by-step code execution visualizer built for learning how code actually runs.**
 
-FlowTrace simulates the execution of C-like programs line by line — showing you exactly which line is executing, how variables change, and why control flows the way it does. No compiler. No black box. Just clarity.
+FlowTrace simulates the execution of C-like programs line by line — showing which line is executing, how variables change, and how control flows through the program.
 
-> Built with React, Monaco Editor, and a custom AST-based interpreter written entirely in JavaScript.
+No compiler. No opaque execution. Just a visible execution trace designed for learning.
+
+> Built with React, Monaco Editor, and a browser-based AST interpreter implemented in JavaScript.
 
 ---
 
 ## What It Does
 
-Most beginners write code and run it — but they never _see_ it run. They guess at variable values, misread loop conditions, and stare at output wondering how it got there.
+Most beginners write code and run it — but they never really *see* it run.
 
-FlowTrace fixes that. Paste in a C program, click **Step**, and watch execution unfold one line at a time. Every variable update is live. Every branch decision is annotated. The trace log keeps a full history of what happened.
+They guess variable values, misread loop conditions, and stare at the final output wondering how the program got there.
 
-It feels like having a debugger — except built for learning, not production.
+FlowTrace makes that process visible.
+
+Paste in a supported C program, click **Step**, and watch execution unfold one action at a time. Variable updates appear live, branch decisions are annotated, and the trace log keeps a history of what happened.
+
+It behaves a little like a debugger — but the focus is learning rather than production debugging.
 
 ---
 
@@ -22,109 +28,136 @@ It feels like having a debugger — except built for learning, not production.
 
 ### Editor
 
-- Full Monaco Editor integration (the same engine powering VS Code)
+- Monaco Editor integration
 - Syntax highlighting for C, C++, Java, and Python
 - Auto-closing brackets, parentheses, and quotes
 - Smart indentation and tab-to-spaces support
 - Bracket pair matching
 - Autocomplete snippets for `int`, `if`, `while`, `for`, `printf`, and more
-- Hover over any variable during execution to see its current value
+- Hover over variables during execution to inspect their current values
 
 ### Execution Engine
 
-- **Step mode** — advance one line at a time
-- **Auto-run mode** — plays through all steps at 700ms intervals with pause support
+- **Step mode** — advance one execution step at a time
+- **Auto-run mode** — play through generated steps automatically
+- **Pause** — stop auto-run at the current step
 - **Restart** — replay from step 1 without re-parsing
-- **Reset** — return to edit mode instantly
-- Live variable panel with change detection and value history trail
-- Color-coded execution notes (condition results, assignments, output, returns)
-- Loop guard — stops runaway loops after 100 iterations
+- **Reset** — return to edit mode
+- Live variable panel with change detection and value history
+- Execution notes for conditions, assignments, output, and returns
+- Loop guard to prevent runaway simulations
 
 ### UI / UX
 
-- Active line highlight via Monaco Decorations API (not CSS hacks)
-- Non-active lines dimmed during execution for focus
-- Scroll sync — editor automatically follows the executing line
+- Active-line highlighting through the Monaco Decorations API
+- Non-active lines dimmed during execution
+- Automatic editor scrolling to the currently executing line
 - Execution progress bar
-- Floating execution badge showing current line number
-- Error banner with line-specific red squiggles (Monaco markers)
-- Copy code and download as `.c` / `.cpp` / `.java` / `.py`
-- Fully responsive — desktop side-by-side layout, mobile tabbed layout
-- Sticky controls bar on mobile with thumb-accessible tap targets
-- Keyboard shortcuts: `Ctrl+Enter` (Step), `Shift+Enter` (Auto-run), `Ctrl+R` (Reset)
+- Current-line execution badge
+- Error banner with Monaco markers
+- Copy code and download as `.c`, `.cpp`, `.java`, or `.py`
+- Responsive desktop and mobile layouts
+- Mobile execution controls
+- Keyboard shortcuts:
+  - `Ctrl+Enter` — Step
+  - `Shift+Enter` — Auto-run
+  - `Ctrl+R` — Reset
 
 ---
 
 ## Screenshots
 
-> _(Coming soon)_
+> *(Coming soon)*
 
-| Desktop — Execution in progress     | Mobile — Variables tab             |
-| ----------------------------------- | ---------------------------------- |
+| Desktop — Execution in progress | Mobile — Variables tab |
+| --- | --- |
 | `screenshots/desktop-execution.png` | `screenshots/mobile-variables.png` |
 
-| Editor — Empty state          | Trace log                   |
-| ----------------------------- | --------------------------- |
+| Editor — Empty state | Trace log |
+| --- | --- |
 | `screenshots/empty-state.png` | `screenshots/trace-log.png` |
 
 ---
 
 ## How It Works
 
-FlowTrace does not compile or execute real C. It runs a custom simulation pipeline entirely in the browser:
+FlowTrace does not compile or execute native C code.
+
+Instead, it uses a browser-side simulation pipeline:
 
 ```
 Raw C Source Code
         │
         ▼
 ┌───────────────┐
-│    Lexer      │  Converts source text into typed tokens
-│  tokenizer.js │  e.g. "int x = 5;" → [INT, IDENT, EQ, NUMBER, SEMI]
+│    Lexer      │
+│ tokenizer.js  │
+│               │
+│ Source code   │
+│ → tokens      │
 └───────┬───────┘
         │
         ▼
 ┌───────────────┐
-│    Parser     │  Recursive descent parser builds an AST
-│ cInterpreter  │  Each node: { kind, line, ...fields }
+│    Parser     │
+│ cInterpreter  │
+│               │
+│ Tokens        │
+│ → AST         │
 └───────┬───────┘
         │
         ▼
-┌───────────────────────────────────────────┐
-│              AST Interpreter              │
-│                                           │
-│  Walks the tree, evaluates expressions,   │
-│  mutates an environment { varName: value} │
-│  Emits one Step per meaningful action:    │
-│  { line, code, variables, note }          │
-└───────┬───────────────────────────────────┘
+┌────────────────────────────────┐
+│        AST Interpreter         │
+│                                 │
+│ Walks the syntax tree          │
+│ Evaluates expressions          │
+│ Updates the variable environment│
+│ Emits execution steps such as: │
+│                                 │
+│ { line, code, variables, note }│
+└───────┬─────────────────────────┘
         │
         ▼
 ┌───────────────┐
-│   React UI    │  Renders steps on demand
-│               │  Monaco decorations highlight active line
-│               │  Variable panel diffs previous vs current state
+│   React UI    │
+│               │
+│ Displays the  │
+│ generated     │
+│ execution     │
+│ trace         │
 └───────────────┘
 ```
 
-### Supported C Syntax
+At a high level:
 
-| Construct               | Example                     | Status |
-| ----------------------- | --------------------------- | ------ |
-| Integer declaration     | `int x = 5;`                | ✅     |
-| Float / char            | `float pi = 3.14;`          | ✅     |
-| Multi-declaration       | `int x = 1, y = 2;`         | ✅     |
-| Arithmetic              | `x = x * 2 + y % 3;`        | ✅     |
-| Compound assignment     | `x += 1;` `y *= 2;`         | ✅     |
-| Increment / decrement   | `x++` `--i`                 | ✅     |
-| Comparison + logical    | `x > 0 && y != 3`           | ✅     |
-| If / else if / else     | Full nesting                | ✅     |
-| While loop              | With iteration counter      | ✅     |
-| For loop                | Init, condition, update     | ✅     |
-| Do-while                |                             | ✅     |
-| Printf simulation       | `%d`, `%f`, `%c`, `%s`      | ✅     |
-| Return statement        |                             | ✅     |
-| Line and block comments | `//` and `/* */`            | ✅     |
-| Preprocessor directives | `#include` silently skipped | ✅     |
+1. The lexer converts source text into tokens.
+2. The parser constructs an abstract syntax tree.
+3. The interpreter walks that tree and maintains a variable environment.
+4. Meaningful execution events become individual steps.
+5. The React interface visualizes those steps using Monaco highlights, variable panels, and trace history.
+
+---
+
+## Supported C Syntax
+
+| Construct | Example | Status |
+| --- | --- | --- |
+| Integer declaration | `int x = 5;` | ✅ |
+| Float / char | `float pi = 3.14;` | ✅ |
+| Multi-declaration | `int x = 1, y = 2;` | ✅ |
+| Arithmetic | `x = x * 2 + y % 3;` | ✅ |
+| Compound assignment | `x += 1; y *= 2;` | ✅ |
+| Increment / decrement | `x++` `--i` | ✅ |
+| Comparison + logical | `x > 0 && y != 3` | ✅ |
+| If / else if / else | Full nesting | ✅ |
+| While loop | With iteration counter | ✅ |
+| For loop | Init, condition, update | ✅ |
+| Do-while | | ✅ |
+| Printf simulation | `%d`, `%f`, `%c`, `%s` | ✅ |
+| Return statement | | ✅ |
+| Line and block comments | `//` and `/* */` | ✅ |
+| Preprocessor directives | `#include` silently skipped | ✅ |
 
 ---
 
@@ -133,39 +166,39 @@ Raw C Source Code
 ```
 flowtrace/
 ├── src/
-│   ├── App.jsx                      # Root — layout, state, orchestration
+│   ├── App.jsx
 │   ├── main.jsx
 │   │
 │   ├── engine/
-│   │   ├── tokenizer.js             # Lexer: source → token list
-│   │   ├── evaluator.js             # Expression evaluator (recursive descent)
-│   │   ├── generateSteps.js         # Language router → interpreter
+│   │   ├── tokenizer.js
+│   │   ├── evaluator.js
+│   │   ├── generateSteps.js
 │   │   └── interpreters/
-│   │       ├── cInterpreter.js      # Full AST-based C interpreter
-│   │       ├── cppInterpreter.js    # Delegates to C (planned extension)
-│   │       ├── javaInterpreter.js   # Placeholder
-│   │       └── pythonInterpreter.js # Placeholder
+│   │       ├── cInterpreter.js
+│   │       ├── cppInterpreter.js
+│   │       ├── javaInterpreter.js
+│   │       └── pythonInterpreter.js
 │   │
 │   ├── components/
 │   │   ├── Header.jsx
 │   │   ├── SampleTabs.jsx
-│   │   ├── CodeEditor.jsx           # Monaco integration + decorations
-│   │   ├── Controls.jsx             # Desktop execution controls
-│   │   ├── MobileControls.jsx       # Fixed bottom bar (mobile)
-│   │   ├── MobileTabs.jsx           # Panel tab switcher (mobile)
+│   │   ├── CodeEditor.jsx
+│   │   ├── Controls.jsx
+│   │   ├── MobileControls.jsx
+│   │   ├── MobileTabs.jsx
 │   │   ├── CurrentStepPanel.jsx
 │   │   ├── VariablesPanel.jsx
 │   │   ├── TraceLog.jsx
 │   │   └── Footer.jsx
 │   │
 │   ├── data/
-│   │   └── samples.js               # Sample programs per language
+│   │   └── samples.js
 │   │
 │   ├── hooks/
-│   │   └── useBreakpoint.js         # ResizeObserver-based responsive hook
+│   │   └── useBreakpoint.js
 │   │
 │   ├── utils/
-│   │   └── languageConfig.js        # Language metadata + support flags
+│   │   └── languageConfig.js
 │   │
 │   └── styles/
 │       └── global.css
@@ -181,26 +214,24 @@ flowtrace/
 **Prerequisites:** Node.js 18+ and npm.
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/flowtrace.git
+git clone https://github.com/Far-200/FlowTrace.git
+cd FlowTrace
 
-# Navigate into the project
-cd flowtrace
-
-# Install dependencies
 npm install
-
-# Start the development server
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+The development server will normally be available at `http://localhost:5173`.
+
+To create a production build:
 
 ```bash
-# Build for production
 npm run build
+```
 
-# Preview the production build
+To preview the production build:
+
+```bash
 npm run preview
 ```
 
@@ -208,118 +239,135 @@ npm run preview
 
 ## Usage
 
-**Writing code:**
+### Writing Code
 
-- Open FlowTrace in your browser
-- The editor starts empty — write C code directly or click a sample from the tabs
-- Supported constructs are listed in the table above
+1. Open FlowTrace in the browser.
+2. Write supported C code directly in the editor or load one of the samples.
+3. The currently supported constructs are listed above.
 
-**Running code:**
+### Running Code
 
-- Click **▶ Step** to execute one line at a time (or `Ctrl+Enter`)
-- Click **⚡ Run** to play through all steps automatically (or `Shift+Enter`)
-- Click **⏸ Pause** during auto-run to stop at the current line
-- Click **⟳ Restart** to replay from step 1 without re-parsing
-- Click **↺ Reset** to return to edit mode (`Ctrl+R`)
+- Click **▶ Step** to move forward one execution step.
+- Click **⚡ Run** to play through the trace automatically.
+- Click **⏸ Pause** to stop auto-run.
+- Click **⟳ Restart** to replay the existing trace.
+- Click **↺ Reset** to return to edit mode.
 
-**Reading the output:**
+### Reading the Output
 
-- The active line is highlighted blue in the editor
-- The **Current Step** panel shows the line being executed and an annotation explaining what happened
-- The **Variables** panel shows all live variables, highlights ones that just changed, and shows a delta (`+1`, `-3`) on updates
-- The **Trace Log** records every step in reverse chronological order
+During execution:
+
+- the current source line is highlighted;
+- the Current Step panel explains what is happening;
+- the Variables panel displays the current program state;
+- recently changed values are highlighted;
+- the Trace Log records previous execution steps.
 
 ---
 
 ## Limitations
 
-FlowTrace is a **simulation engine**, not a real C compiler. It is intentionally scoped to the constructs that are most relevant for learning.
+FlowTrace is a simulation engine, not a real C compiler.
 
-**Not supported (yet):**
+It intentionally supports only a subset of the language that is useful for learning basic execution and control flow.
 
-- Pointers and pointer arithmetic (`*`, `&`)
+### Not Currently Supported
+
+- Pointers and pointer arithmetic
 - Arrays and array indexing
 - User-defined functions and call stacks
 - Structs and unions
-- Dynamic memory (`malloc`, `free`)
-- Standard library calls (`scanf`, `fgets`, `math.h`, etc.)
-- Preprocessor directives (`#define`, `#ifdef`)
+- Dynamic memory allocation
+- Standard input such as `scanf`
+- Most standard-library functionality
+- Preprocessor macros such as `#define`
+- Conditional preprocessing
 - Multi-file programs
-- Undefined behavior — FlowTrace will either error cleanly or produce simplified output
+- Full C language semantics
+- Undefined behavior
 
-If you paste a program that uses unsupported features, FlowTrace will either skip those lines silently or surface a clear error message. It will not crash.
+Programs containing unsupported syntax may either produce a validation error or behave according to the simplified semantics implemented by FlowTrace.
 
 ---
 
 ## Roadmap
 
-**Near-term:**
+### Near-term
+- [ ] Array support
+- [ ] User-defined functions
+- [ ] Visible call-stack panel
+- [ ] Execution speed controls
+- [ ] Breakpoints
 
-- [ ] Array support (`int arr[5]`, indexing, iteration)
-- [ ] User-defined functions with a visible call stack panel
-- [ ] Execution speed control (slow / normal / fast)
-- [ ] Breakpoints — click a line number to pause there
+### Medium-term
+- [ ] Python execution support
+- [ ] Java execution support
+- [ ] Memory visualization
 
-**Medium-term:**
-
-- [ ] Python interpreter (indentation-based block parsing)
-- [ ] Java interpreter
-- [ ] Memory view — visualize stack allocations
-
-**Long-term:**
-
-- [ ] Optional backend execution mode using GCC + GDB output parsing
-- [ ] WebAssembly-based real C execution in the browser
-- [ ] Collaborative mode — share a session link
+### Long-term
+- [ ] Optional backend execution using compiler/debugger output
+- [ ] WebAssembly-based execution experiments
+- [ ] Shareable execution sessions
 
 ---
 
 ## Why This Project Exists
 
-Tools like Python Tutor showed that visualizing execution changes how people learn to program. But Python Tutor is limited in scope and dated in design.
+Execution visualizers such as Python Tutor demonstrate how useful it can be to make program state visible while learning.
 
-FlowTrace is an attempt to build something closer to a real developer tool — with a proper editor, a real parse tree, and a UI that respects the user's intelligence — while keeping the core goal simple: **make code stop being magic and start being visible.**
+FlowTrace explores the same general idea through a more IDE-like interface built around Monaco Editor, interactive execution controls, variable inspection, and an explicit execution trace.
 
-The interpreter is written from scratch (no eval, no external parsing libraries) specifically because understanding how a lexer, parser, and tree-walking interpreter work is itself a valuable learning outcome. The codebase is intentionally readable and documented for exactly this reason.
+The project also serves as a way to explore how tokenization, parsing, abstract syntax trees, interpretation, and execution visualization fit together inside a developer tool.
+
+The implementation avoids external parsing libraries, which keeps the lexer, parser, and interpreter pipeline directly inspectable inside the repository.
+
+---
+
+## Development Note
+
+FlowTrace was developed with substantial AI-assisted coding.
+
+The project is presented as both a portfolio project and a learning project. Its purpose is not to claim that every subsystem was manually authored from scratch, but to explore the architecture, product design, debugging workflow, and engineering concepts behind an interactive execution visualizer.
+
+The repository is being used as a system to study, understand, test, and progressively modify rather than as evidence of unaided implementation.
 
 ---
 
 ## Tech Stack
 
-| Layer       | Technology                                   |
-| ----------- | -------------------------------------------- |
-| Framework   | React 19                                     |
-| Build tool  | Vite                                         |
-| Editor      | Monaco Editor (`@monaco-editor/react`)       |
-| Styling     | CSS Modules + inline styles                  |
-| Lexer       | Custom (tokenizer.js)                        |
-| Parser      | Recursive descent (cInterpreter.js)          |
-| Interpreter | Tree-walking AST evaluator                   |
-| Responsive  | Custom `useBreakpoint` hook (ResizeObserver) |
+| Layer | Technology |
+| --- | --- |
+| Framework | React 19 |
+| Build tool | Vite |
+| Editor | Monaco Editor (`@monaco-editor/react`) |
+| Styling | CSS Modules + inline styles |
+| Lexer | Custom tokenizer |
+| Parser | Recursive-descent parser |
+| Interpreter | Tree-walking AST evaluator |
+| Responsive | Custom `useBreakpoint` hook |
 
-No UI component libraries. No external parsing libraries. No runtime dependencies beyond React and Monaco.
+The execution pipeline does not rely on an external parsing library or native compiler runtime.
 
 ---
 
 ## Contributing
 
-Contributions are welcome, especially for:
+Contributions are welcome, especially around:
 
-- New language interpreters (Python, Java)
-- Additional C syntax support
-- Bug reports with code that produces incorrect output
+- additional C syntax;
+- new language interpreters;
+- execution visualization;
+- educational UX;
+- bugs that produce incorrect execution traces.
 
-Please open an issue before submitting a large PR.
+Please open an issue before submitting a large change.
 
 ---
 
 ## License
 
-MIT License — free to use, modify, and distribute.
-Just..........credit the original author🫠
+MIT License.
 
-Also, any criticism and suggestions are welcome🥹
+You are free to use, modify, and distribute the project according to the terms of the license.
 
----
-
-_FlowTrace is a portfolio and learning project. It is not affiliated with any compiler toolchain or IDE vendor._
+FlowTrace is a portfolio and learning project. It is not affiliated with any compiler toolchain or IDE vendor.
