@@ -156,6 +156,8 @@ At a high level:
 | Do-while | | ✅ |
 | Printf simulation | `%d`, `%f`, `%c`, `%s` | ✅ |
 | Return statement | | ✅ |
+| Arrays | `int arr[5] = {1,2,3}; arr[i] = x;` | ✅ |
+| User-defined functions | `int add(int a, int b) { return a + b; }`, nested calls, recursion | ✅ |
 | Line and block comments | `//` and `/* */` | ✅ |
 | Preprocessor directives | `#include` silently skipped | ✅ |
 
@@ -274,10 +276,9 @@ It intentionally supports only a subset of the language that is useful for learn
 ### Not Currently Supported
 
 - Pointers and pointer arithmetic
-- Arrays and array indexing
-- User-defined functions and call stacks
 - Structs and unions
 - Dynamic memory allocation
+- Function prototypes (forward declarations without a body) and array parameters
 - Standard input such as `scanf`
 - Most standard-library functionality
 - Preprocessor macros such as `#define`
@@ -293,9 +294,9 @@ Programs containing unsupported syntax may either produce a validation error or 
 ## Roadmap
 
 ### Near-term
-- [ ] Array support
-- [ ] User-defined functions
-- [ ] Visible call-stack panel
+- [x] Array support
+- [x] User-defined functions
+- [x] Visible call-stack panel
 - [ ] Execution speed controls
 - [ ] Breakpoints
 
