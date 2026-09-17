@@ -1,8 +1,8 @@
 // src/App.jsx
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 
 import { generateSteps } from "./engine/generateSteps.js";
-import { SAMPLES, DEFAULT_SAMPLE } from "./data/samples.js";
+import { SAMPLES } from "./data/samples.js";
 import { LANGUAGES } from "./utils/languageConfig.js";
 import { useBreakpoint } from "./hooks/useBreakpoint.js";
 
@@ -42,7 +42,7 @@ export default function App() {
   const prevStep = steps[stepIdx - 1];
   const isDone = steps.length > 0 && stepIdx === steps.length - 1;
   const isSupported = LANGUAGES[language]?.supported ?? false;
-  const currentSamples = SAMPLES[language] ?? {};
+  const currentSamples = useMemo(() => SAMPLES[language] ?? {}, [language]);
   const isEmpty = !code || code.trim() === "";
   const varCount = currentStep ? Object.keys(currentStep.variables).length : 0;
 

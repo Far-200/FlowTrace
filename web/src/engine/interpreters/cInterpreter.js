@@ -512,7 +512,6 @@ function parse(tokens) {
 
     // ── Array element assignment: arr[i] = expr ──────────────
     if (check(TT.IDENT) && tokens[pos + 1]?.type === TT.LBRACKET) {
-      const savedPos = pos;
       const name = advance().value; // consume IDENT
       advance(); // consume '['
       const index = parseExpr();
@@ -1065,7 +1064,7 @@ function interpret(ast, sourceLines) {
       case "DoWhile": {
         let iters = 0;
         const condSrc = exprToString(node.condition);
-        do {
+        for (;;) {
           if (++iters > MAX_ITER) {
             addStep(
               node.line,
@@ -1087,7 +1086,7 @@ function interpret(ast, sourceLines) {
             `do-while (${condSrc}) → ${condVal ? "TRUE ✓ — continue" : "FALSE ✗ — exit loop"}`,
           );
           if (!condVal) break;
-        } while (true);
+        }
         return null;
       }
 

@@ -175,7 +175,13 @@ export default function CodeEditor({
     : 0;
   const isDone = steps.length > 0 && stepIdx === steps.length - 1;
 
-  currentVarsRef.current = currentStep?.variables ?? {};
+  // Sync the hover provider's closure with the latest step. This runs
+  // in an effect (not during render) because currentVarsRef is read by
+  // an external system — Monaco's async hover callback — not by this
+  // component's own render output.
+  useEffect(() => {
+    currentVarsRef.current = currentStep?.variables ?? {};
+  }, [currentStep]);
 
   // ── Mount ─────────────────────────────────────────────────
   function handleEditorDidMount(editor, monaco) {

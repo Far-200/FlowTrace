@@ -17,27 +17,44 @@ export default function VariablesPanel({ currentStep, prevStep }) {
   const [varHistory, setVarHistory] = useState({});
   const prevVarsRef = useRef({});
 
-  useEffect(() => {
+  // `historyStep` records which currentStep varHistory was last derived
+  // from. varHistory only exists to accumulate a sparkline across many
+  // steps — it can't be computed from this render's props alone — so
+  // per React's own "adjusting state when a prop changes" guidance
+  // (https://react.dev/learn/you-might-not-need-an-effect), the update
+  // happens conditionally right here during render instead of through
+  // an effect: it runs exactly once per distinct currentStep, and
+  // React re-renders immediately with the corrected state before
+  // anything is painted, so this is not visible as an extra frame.
+  const [historyStep, setHistoryStep] = useState(currentStep);
+  if (currentStep !== historyStep) {
+    setHistoryStep(currentStep);
     if (!currentStep) {
       setVarHistory({});
-      return;
-    }
-
-    const curr = currentStep.variables;
-    setVarHistory((prev) => {
-      const next = { ...prev };
-      for (const name of Object.keys(curr)) {
-        const existing = next[name] ?? [];
-        // Only push if value actually changed
-        const last = existing[existing.length - 1];
-        if (last !== curr[name]) {
-          next[name] = [...existing, curr[name]].slice(-MAX_HISTORY);
+    } else {
+      const curr = currentStep.variables;
+      setVarHistory((prev) => {
+        const next = { ...prev };
+        for (const name of Object.keys(curr)) {
+          const existing = next[name] ?? [];
+          // Only push if value actually changed
+          const last = existing[existing.length - 1];
+          if (last !== curr[name]) {
+            next[name] = [...existing, curr[name]].slice(-MAX_HISTORY);
+          }
         }
-      }
-      return next;
-    });
+        return next;
+      });
+    }
+  }
 
-    prevVarsRef.current = curr;
+  // prevVarsRef is a plain ref (not read during render), so — unlike
+  // varHistory above — syncing it stays in an effect, which is the
+  // correct place to mutate a ref as a side effect of a prop change.
+  useEffect(() => {
+    if (currentStep) {
+      prevVarsRef.current = currentStep.variables;
+    }
   }, [currentStep]);
 
   return (

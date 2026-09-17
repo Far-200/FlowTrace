@@ -15,10 +15,9 @@
  * Python interpreter — not yet implemented.
  * Returns empty steps array so the app never crashes.
  *
- * @param {string} _code
  * @returns {Array}
  */
-export function runPythonInterpreter(_code) {
+export function runPythonInterpreter() {
   // TODO: implement Python simulation
   return [];
 }
