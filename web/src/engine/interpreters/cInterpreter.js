@@ -780,7 +780,7 @@ function interpret(ast, sourceLines) {
     return Object.hasOwn(env, name) || !Object.hasOwn(globals, name) ? env : globals;
   }
 
-  function callFunction(name, args, line, needsValue) {
+  function callFunction(name, args, line, needsValue, isEntryCall = false) {
     const fn = functions.get(name);
     if (!fn) throw new RuntimeError(`Unknown function "${name}"`, line);
     if (args.length !== fn.params.length) {
@@ -821,8 +821,16 @@ function interpret(ast, sourceLines) {
       frames.pop();
       env = callerEnv;
     }
+    // Zero frames remain both when the true entry call (main, invoked below
+    // by the driver) returns, and when a call made from a global initializer
+    // returns before main has even started — only the former is "complete".
+    const resumeNote = frames.length
+      ? ` → resume ${frames.at(-1).fn.name}`
+      : isEntryCall
+        ? " → execution complete"
+        : " → resume global initialization";
     addStep(frames.length ? line : fn.body.endLine,
-      `↩ ${name} returned${result === undefined ? "" : ` ${fmt(result)}`}${frames.length ? ` → resume ${frames.at(-1).fn.name}` : " → execution complete"}`);
+      `↩ ${name} returned${result === undefined ? "" : ` ${fmt(result)}`}${resumeNote}`);
     return result;
   }
 
@@ -1325,7 +1333,7 @@ function interpret(ast, sourceLines) {
         }
       }
       for (const node of declarations) execStmt(node);
-      callFunction("main", [], functions.get("main").line, false);
+      callFunction("main", [], functions.get("main").line, false, true);
     } else {
       execStmt(ast);
     }

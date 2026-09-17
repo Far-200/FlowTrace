@@ -229,3 +229,16 @@ test("for-loop update may call a void function purely for its side effect", () =
     }`);
   assert.match(steps.at(-1).note, /main returned 3/);
 });
+
+test('"execution complete" is reported only for the true entry call, not for a call in a global initializer', () => {
+  const steps = successful(`int helper() { return 5; }
+    int x = helper();
+    int main() { return x; }`);
+  const helperReturn = steps.find((s) => s.note.startsWith("↩ helper returned"));
+  const mainReturn = steps.find((s) => s.note.startsWith("↩ main returned"));
+  assert.ok(helperReturn, "expected a helper return step");
+  assert.ok(mainReturn, "expected a main return step");
+  assert.doesNotMatch(helperReturn.note, /execution complete/);
+  assert.match(helperReturn.note, /resume global initialization/);
+  assert.match(mainReturn.note, /execution complete/);
+});
