@@ -25,7 +25,7 @@ import { runPythonInterpreter } from "./interpreters/pythonInterpreter.js";
  *
  * @param {string} code     - raw source code
  * @param {string} language - "c" | "cpp" | "java" | "python"
- * @returns {Array<{line:number, code:string, variables:Object, note:string}>}
+ * @returns {Array<{line:number, code:string, variables:Object, note:string, callStack:Array}>}
  */
 export function generateSteps(code, language) {
   switch (language) {

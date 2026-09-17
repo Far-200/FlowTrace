@@ -9,6 +9,43 @@
 
 export const SAMPLES = {
   c: {
+    "Basic Functions": `int add(int a, int b) {
+  int result = a + b;
+  return result;
+}
+
+int main() {
+  int x = add(2, 3);
+  return 0;
+}`,
+
+    "Nested Calls": `int doubleValue(int n) {
+  return n * 2;
+}
+
+int addThenDouble(int a, int b) {
+  int sum = a + b;
+  int result = doubleValue(sum);
+  return result;
+}
+
+int main() {
+  int answer = addThenDouble(2, 3);
+  return 0;
+}`,
+
+    "Recursive Factorial": `int factorial(int n) {
+  if (n <= 1) {
+    return 1;
+  }
+  return n * factorial(n - 1);
+}
+
+int main() {
+  int result = factorial(5);
+  return 0;
+}`,
+
     "Basic Math": `int x = 5;
 int y = 3;
 int z = x + y;

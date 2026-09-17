@@ -1,8 +1,8 @@
 // src/App.jsx
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 
 import { generateSteps } from "./engine/generateSteps.js";
-import { SAMPLES, DEFAULT_SAMPLE } from "./data/samples.js";
+import { SAMPLES } from "./data/samples.js";
 import { LANGUAGES } from "./utils/languageConfig.js";
 import { useBreakpoint } from "./hooks/useBreakpoint.js";
 
@@ -14,6 +14,7 @@ import MobileControls from "./components/MobileControls.jsx";
 import MobileTabs from "./components/MobileTabs.jsx";
 import CurrentStepPanel from "./components/CurrentStepPanel.jsx";
 import VariablesPanel from "./components/VariablesPanel.jsx";
+import CallStackPanel from "./components/CallStackPanel.jsx";
 import TraceLog from "./components/TraceLog.jsx";
 import Footer from "./components/Footer.jsx";
 
@@ -42,7 +43,7 @@ export default function App() {
   const prevStep = steps[stepIdx - 1];
   const isDone = steps.length > 0 && stepIdx === steps.length - 1;
   const isSupported = LANGUAGES[language]?.supported ?? false;
-  const currentSamples = SAMPLES[language] ?? {};
+  const currentSamples = useMemo(() => SAMPLES[language] ?? {}, [language]);
   const isEmpty = !code || code.trim() === "";
   const varCount = currentStep ? Object.keys(currentStep.variables).length : 0;
 
@@ -79,7 +80,6 @@ export default function App() {
   }, []);
 
   const handleStep = useCallback(() => {
-    if (isMobile) setMobileTab("step");
     let s = steps;
     if (s.length === 0) {
       s = compile();
@@ -93,7 +93,7 @@ export default function App() {
         { stepIdx: next, vars: { ...s[next].variables } },
       ]);
     }
-  }, [steps, stepIdx, compile, isMobile]);
+  }, [steps, stepIdx, compile]);
 
   const handleAutoRun = useCallback(() => {
     if (isRunning) {
@@ -262,6 +262,7 @@ export default function App() {
           >
             <CurrentStepPanel {...panelProps} />
             <VariablesPanel {...panelProps} />
+            <CallStackPanel currentStep={currentStep} />
             <TraceLog varHistory={varHistory} />
           </div>
         </div>
@@ -347,6 +348,7 @@ export default function App() {
       >
         {mobileTab === "step" && <CurrentStepPanel {...panelProps} />}
         {mobileTab === "variables" && <VariablesPanel {...panelProps} />}
+        {mobileTab === "stack" && <CallStackPanel currentStep={currentStep} />}
         {mobileTab === "trace" && <TraceLog varHistory={varHistory} />}
       </div>
 

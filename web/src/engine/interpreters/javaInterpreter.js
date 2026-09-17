@@ -17,10 +17,9 @@
  * Java interpreter — not yet implemented.
  * Returns empty steps array so the app never crashes.
  *
- * @param {string} _code
  * @returns {Array}
  */
-export function runJavaInterpreter(_code) {
+export function runJavaInterpreter() {
   // TODO: implement Java simulation
   return [];
 }

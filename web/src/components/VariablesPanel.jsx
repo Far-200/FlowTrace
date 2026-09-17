@@ -10,6 +10,10 @@ import { useEffect, useRef, useState } from "react";
 // Tracks the last N values per variable for the mini history
 const MAX_HISTORY = 5;
 
+function scopeId(step) {
+  return step?.callStack?.at(-1)?.id ?? "global";
+}
+
 export default function VariablesPanel({ currentStep, prevStep }) {
   const varNames = currentStep ? Object.keys(currentStep.variables) : [];
 
@@ -17,27 +21,45 @@ export default function VariablesPanel({ currentStep, prevStep }) {
   const [varHistory, setVarHistory] = useState({});
   const prevVarsRef = useRef({});
 
-  useEffect(() => {
+  // `historyStep` records which currentStep varHistory was last derived
+  // from. varHistory only exists to accumulate a sparkline across many
+  // steps — it can't be computed from this render's props alone — so
+  // per React's own "adjusting state when a prop changes" guidance
+  // (https://react.dev/learn/you-might-not-need-an-effect), the update
+  // happens conditionally right here during render instead of through
+  // an effect: it runs exactly once per distinct currentStep, and
+  // React re-renders immediately with the corrected state before
+  // anything is painted, so this is not visible as an extra frame.
+  const [historyStep, setHistoryStep] = useState(currentStep);
+  if (currentStep !== historyStep) {
+    const scopeChanged = scopeId(currentStep) !== scopeId(historyStep);
+    setHistoryStep(currentStep);
     if (!currentStep) {
       setVarHistory({});
-      return;
-    }
-
-    const curr = currentStep.variables;
-    setVarHistory((prev) => {
-      const next = { ...prev };
-      for (const name of Object.keys(curr)) {
-        const existing = next[name] ?? [];
-        // Only push if value actually changed
-        const last = existing[existing.length - 1];
-        if (last !== curr[name]) {
-          next[name] = [...existing, curr[name]].slice(-MAX_HISTORY);
+    } else {
+      const curr = currentStep.variables;
+      setVarHistory((prev) => {
+        const next = scopeChanged ? {} : { ...prev };
+        for (const name of Object.keys(curr)) {
+          const existing = Object.hasOwn(next, name) ? next[name] : [];
+          // Only push if value actually changed
+          const last = existing[existing.length - 1];
+          if (last !== curr[name]) {
+            next[name] = [...existing, curr[name]].slice(-MAX_HISTORY);
+          }
         }
-      }
-      return next;
-    });
+        return next;
+      });
+    }
+  }
 
-    prevVarsRef.current = curr;
+  // prevVarsRef is a plain ref (not read during render), so — unlike
+  // varHistory above — syncing it stays in an effect, which is the
+  // correct place to mutate a ref as a side effect of a prop change.
+  useEffect(() => {
+    if (currentStep) {
+      prevVarsRef.current = currentStep.variables;
+    }
   }, [currentStep]);
 
   return (
@@ -69,7 +91,8 @@ export default function VariablesPanel({ currentStep, prevStep }) {
           <div style={{ display: "flex", flexWrap: "wrap" }}>
             {varNames.map((name) => {
               const val = currentStep.variables[name];
-              const prevVal = prevStep?.variables?.[name];
+              const prevVal = scopeId(currentStep) === scopeId(prevStep)
+                ? prevStep?.variables?.[name] : undefined;
               const changed = prevVal !== undefined && prevVal !== val;
               const hist = varHistory[name] ?? [];
 
@@ -108,10 +131,11 @@ function VarPill({ name, val, prevVal, changed, history }) {
 
   // Infer display type hint
   const isFloat = !Number.isInteger(val);
-  const typeHint = isFloat ? "float" : "int";
+  const typeHint = Array.isArray(val) ? "array" : isFloat ? "float" : "int";
 
   // Delta indicator
-  const delta = prevVal !== undefined && prevVal !== val ? val - prevVal : null;
+  const delta = typeof val === "number" && typeof prevVal === "number" && prevVal !== val
+    ? val - prevVal : null;
 
   return (
     <div
@@ -194,6 +218,7 @@ function VarPill({ name, val, prevVal, changed, history }) {
 }
 
 function formatVal(val) {
+  if (Array.isArray(val)) return `[${val.join(", ")}]`;
   if (Number.isInteger(val)) return String(val);
   return parseFloat(val.toFixed(4)).toString();
 }

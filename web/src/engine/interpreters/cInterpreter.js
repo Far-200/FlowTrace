@@ -7,7 +7,7 @@
 //
 // PUBLIC API:
 //   runCInterpreter(code: string) → Step[]
-//   Step = { line: number, code: string, variables: Object, note: string }
+//   Step = { line, code, variables, note, callStack: Frame[] }
 //
 // SUPPORTED:
 //   ✅ int / float / char declarations + assignments
@@ -26,7 +26,8 @@
 //   ✅ // and /* */ comments stripped
 //   ✅ #include / preprocessor silently ignored
 //   ✅ Clean runtime error messages
-//   ❌ Pointers, structs, functions, malloc
+//   ✅ int / void functions, int parameters, nested calls and recursion
+//   ❌ Pointers, structs, prototypes, array parameters, malloc
 // ═══════════════════════════════════════════════════════════════
 
 // ───────────────────────────────────────────────────────────────
@@ -203,7 +204,7 @@ function lex(source) {
       let id = "";
       while (i < source.length && /[a-zA-Z0-9_]/.test(source[i]))
         id += source[i++];
-      tokens.push({ type: KEYWORDS[id] || TT.IDENT, value: id, line });
+      tokens.push({ type: Object.hasOwn(KEYWORDS, id) ? KEYWORDS[id] : TT.IDENT, value: id, line });
       continue;
     }
 
@@ -290,15 +291,38 @@ function parse(tokens) {
   function parseProgram() {
     const body = [];
     while (!isAtEnd()) {
-      try {
-        const stmt = parseStatement();
-        if (stmt) body.push(stmt);
-      } catch (e) {
-        if (e instanceof ParseError) throw e;
-        advance();
-      }
+      const isFunction = TYPE_KEYWORDS.has(peekType()) &&
+        tokens[pos + 1]?.type === TT.IDENT && tokens[pos + 2]?.type === TT.LPAREN;
+      const stmt = isFunction ? parseFunction() : parseStatement();
+      if (stmt) body.push(stmt);
     }
     return { kind: "Program", body };
+  }
+
+  function parseFunction() {
+    const { value: returnType, line } = advance();
+    if (returnType !== "int" && returnType !== "void") {
+      throw new ParseError(`Line ${line}: Only int and void function returns are supported`);
+    }
+    const name = expect(TT.IDENT, "Expected function name").value;
+    expect(TT.LPAREN, "Expected '('");
+    const params = [];
+    if (check(TT.VOID) && tokens[pos + 1]?.type === TT.RPAREN) advance();
+    else if (!check(TT.RPAREN)) {
+      do {
+        expect(TT.INT, "Expected int parameter type");
+        const param = expect(TT.IDENT, "Expected parameter name");
+        if (params.some((p) => p.name === param.value)) {
+          throw new ParseError(`Line ${param.line}: Duplicate parameter "${param.value}"`);
+        }
+        params.push({ name: param.value, typeName: "int", line: param.line });
+        if (!check(TT.COMMA)) break;
+        advance();
+      } while (!isAtEnd());
+    }
+    expect(TT.RPAREN, "Expected ')' after parameters");
+    const body = parseBlock();
+    return { kind: "FunctionDecl", name, returnType, params, body, line };
   }
 
   // ── STATEMENT ────────────────────────────────────────────
@@ -327,8 +351,8 @@ function parse(tokens) {
       const stmt = parseStatement();
       if (stmt) body.push(stmt);
     }
-    expect(TT.RBRACE, "Expected '}'");
-    return { kind: "Block", body, line };
+    const endLine = expect(TT.RBRACE, "Expected '}'").line;
+    return { kind: "Block", body, line, endLine };
   }
 
   // ── VAR DECLARATION (scalars + arrays) ───────────────────
@@ -483,12 +507,6 @@ function parse(tokens) {
   // ── EXPRESSION STATEMENT ─────────────────────────────────
   function parseExprStmt() {
     const line = peek().line;
-    // Skip unsupported function calls (scanf, main, etc.)
-    if (check(TT.IDENT) && tokens[pos + 1]?.type === TT.LPAREN) {
-      while (!check(TT.SEMI) && !check(TT.RBRACE) && !isAtEnd()) advance();
-      if (check(TT.SEMI)) advance();
-      return null;
-    }
     const expr = parseExpr();
     expect(TT.SEMI, "Expected ';' after expression");
     return { kind: "ExprStmt", expr, line };
@@ -512,7 +530,7 @@ function parse(tokens) {
 
     // ── Array element assignment: arr[i] = expr ──────────────
     if (check(TT.IDENT) && tokens[pos + 1]?.type === TT.LBRACKET) {
-      const savedPos = pos;
+      const start = pos;
       const name = advance().value; // consume IDENT
       advance(); // consume '['
       const index = parseExpr();
@@ -531,9 +549,8 @@ function parse(tokens) {
         const value = parseAssignment();
         return { kind: "ArrayAssign", name, index, op, value, line };
       }
-      // Not an assignment — it's a read (arr[i] used as expression)
-      // Return ArrayAccess so evalExpr can handle it
-      return { kind: "ArrayAccess", name, index, line };
+      // Reparse reads through precedence rules (e.g. arr[i] + f()).
+      pos = start;
     }
 
     // ── Scalar assignment: x = expr ──────────────────────────
@@ -622,10 +639,16 @@ function parse(tokens) {
     let node = parsePrimary();
     if (check(TT.PLUSPLUS)) {
       advance();
+      if (node.kind !== "Identifier") {
+        throw new ParseError(`Line ${node.line}: "++" requires a variable, not an expression`);
+      }
       return { kind: "PostUpdate", op: "++", name: node.name, line: node.line };
     }
     if (check(TT.MINUSMINUS)) {
       advance();
+      if (node.kind !== "Identifier") {
+        throw new ParseError(`Line ${node.line}: "--" requires a variable, not an expression`);
+      }
       return { kind: "PostUpdate", op: "--", name: node.name, line: node.line };
     }
     return node;
@@ -641,6 +664,19 @@ function parse(tokens) {
 
     if (check(TT.IDENT)) {
       advance();
+      if (check(TT.LPAREN)) {
+        advance();
+        const args = [];
+        if (!check(TT.RPAREN)) {
+          do {
+            args.push(parseExpr());
+            if (!check(TT.COMMA)) break;
+            advance();
+          } while (!isAtEnd());
+        }
+        expect(TT.RPAREN, "Expected ')' after arguments");
+        return { kind: "Call", name: tok.value, args, line: tok.line };
+      }
       // ── Array element read: arr[i] ────────────────────────
       if (check(TT.LBRACKET)) {
         advance(); // consume '['
@@ -658,10 +694,7 @@ function parse(tokens) {
       return expr;
     }
 
-    // Unexpected token — return 0 literal and skip
-    const line = tok.line;
-    advance();
-    return { kind: "Literal", value: 0, line };
+    throw new ParseError(`Line ${tok.line}: Expected expression (got "${tok.value}")`);
   }
 
   return parseProgram();
@@ -672,24 +705,141 @@ function parse(tokens) {
 // ───────────────────────────────────────────────────────────────
 
 const MAX_ITER = 100;
+const MAX_CALL_DEPTH = 64;
+const MAX_OPERATIONS = 50000;
+const MAX_STEPS = 5000;
+const MAX_SNAPSHOT_VALUES = 200000;
+const MAX_ARRAY_SIZE = 10000;
 
 function interpret(ast, sourceLines) {
   const steps = [];
-  const env = {}; // { varName: number | number[] }
+  const globals = Object.create(null);
+  let env = globals; // Only the active frame and globals are visible.
+  const functions = new Map();
+  const frames = [];
+  let nextFrameId = 1;
+  let operations = 0;
+  let snapshotValues = 0;
+
+  function tick(line, count = 1) {
+    operations += count;
+    if (operations > MAX_OPERATIONS) {
+      throw new ExecutionLimitError(`Execution exceeded ${MAX_OPERATIONS} operations`, line);
+    }
+  }
+
+  function copyVariables(scope) {
+    return Object.fromEntries(Object.entries(scope).map(([k, v]) =>
+      [k, Array.isArray(v) ? [...v] : v]));
+  }
+
+  function snapshot(lineNum, note) {
+    if (frames.length) frames.at(-1).line = lineNum;
+    return {
+      line: lineNum,
+      code: (sourceLines[lineNum - 1] ?? "").trim(),
+      variables: copyVariables({ ...globals, ...env }),
+      note,
+      callStack: frames.map((frame, index) => ({
+        id: frame.id,
+        functionName: frame.fn.name,
+        line: frame.line,
+        parameters: copyVariables(Object.fromEntries(frame.fn.params.map(
+          ({ name }) => [name, frame.env[name]],
+        ))),
+        locals: copyVariables(frame.env), // Includes parameters, which are locals.
+        isActive: index === frames.length - 1,
+      })),
+    };
+  }
 
   function addStep(lineNum, note = "") {
-    const code = (sourceLines[lineNum - 1] ?? "").trim();
-    // Snapshot env — arrays need a shallow copy of their contents
-    const variables = {};
-    for (const [k, v] of Object.entries(env)) {
-      variables[k] = Array.isArray(v) ? [...v] : v;
+    if (steps.length >= MAX_STEPS) {
+      throw new ExecutionLimitError(`Trace exceeded ${MAX_STEPS} steps`, lineNum);
     }
-    steps.push({ line: lineNum, code, variables, note });
+    const scopes = [globals, env, ...frames.map((frame) => frame.env)];
+    for (const scope of scopes) {
+      for (const value of Object.values(scope)) {
+        snapshotValues += Array.isArray(value) ? value.length + 1 : 1;
+      }
+    }
+    if (snapshotValues > MAX_SNAPSHOT_VALUES) {
+      throw new ExecutionLimitError("Trace snapshot memory limit exceeded", lineNum);
+    }
+    steps.push(snapshot(lineNum, note));
+  }
+
+  function reportError(error, line) {
+    // Function failures must unwind, never fabricate a return value. Preserve
+    // the legacy snippet recovery policy, except for hard execution limits.
+    if (functions.size || error instanceof ExecutionLimitError) throw error;
+    addStep(line, `⚠️ ${error.message}`);
+  }
+
+  function assignmentScope(name) {
+    return Object.hasOwn(env, name) || !Object.hasOwn(globals, name) ? env : globals;
+  }
+
+  function callFunction(name, args, line, needsValue, isEntryCall = false) {
+    const fn = functions.get(name);
+    if (!fn) throw new RuntimeError(`Unknown function "${name}"`, line);
+    if (args.length !== fn.params.length) {
+      throw new RuntimeError(`${name} expects ${fn.params.length} arguments, got ${args.length}`, line);
+    }
+    if (needsValue && fn.returnType === "void") {
+      throw new RuntimeError(`Void function "${name}" cannot be used as a value`, line);
+    }
+    if (frames.length >= MAX_CALL_DEPTH) {
+      throw new ExecutionLimitError(`Call depth exceeded ${MAX_CALL_DEPTH} frames`, line);
+    }
+    // Evaluate once, left to right, before entering the callee.
+    const values = args.map((arg) => Math.trunc(evalExpr(arg)));
+    const callerEnv = env;
+    if (frames.length) frames.at(-1).line = line;
+    const localEnv = Object.create(globals);
+    fn.params.forEach((param, index) => { localEnv[param.name] = values[index]; });
+    const frame = { id: nextFrameId++, fn, env: localEnv, line: fn.line };
+    frames.push(frame);
+    env = localEnv;
+    let result;
+    try {
+      addStep(fn.line, `→ Enter ${name}(${values.join(", ")})`);
+      const signal = execStmt(fn.body);
+      if (signal?.kind === "return") result = signal.value;
+      else {
+        if (fn.returnType === "int" && name !== "main") {
+          throw new RuntimeError(`Function "${name}" ended without returning a value`, fn.body.endLine);
+        }
+        result = fn.returnType === "int" ? 0 : undefined;
+        addStep(fn.body.endLine, result === undefined ? "↩ return" : `↩ return ${result} (implicit)`);
+      }
+    } catch (error) {
+      // Capture the deepest failing frame before finally restores the caller.
+      error.step ??= snapshot(error.line ?? frame.line, `⚠️ ${error.message}`);
+      throw error;
+    } finally {
+      frames.pop();
+      env = callerEnv;
+    }
+    // Zero frames remain both when the true entry call (main, invoked below
+    // by the driver) returns, and when a call made from a global initializer
+    // returns before main has even started — only the former is "complete".
+    const resumeNote = frames.length
+      ? ` → resume ${frames.at(-1).fn.name}`
+      : isEntryCall
+        ? " → execution complete"
+        : " → resume global initialization";
+    addStep(frames.length ? line : fn.body.endLine,
+      `↩ ${name} returned${result === undefined ? "" : ` ${fmt(result)}`}${resumeNote}`);
+    return result;
   }
 
   // ── EXPRESSION EVALUATOR ──────────────────────────────────
-  function evalExpr(node) {
+  function evalExpr(node, needsValue = true) {
+    tick(node.line);
     switch (node.kind) {
+      case "Call":
+        return callFunction(node.name, node.args, node.line, needsValue);
       case "Literal":
         return node.value;
 
@@ -755,6 +905,7 @@ function interpret(ast, sourceLines) {
             arr[idx] = Math.trunc(arr[idx] / rhs);
             break;
           case TT.PERCENTEQ:
+            if (rhs === 0) throw new RuntimeError("Modulo by zero", node.line);
             arr[idx] %= rhs;
             break;
         }
@@ -763,6 +914,8 @@ function interpret(ast, sourceLines) {
 
       case "Binary": {
         const L = evalExpr(node.left);
+        if (node.op === "&&" && !L) return 0;
+        if (node.op === "||" && L) return 1;
         const R = evalExpr(node.right);
         switch (node.op) {
           case "+":
@@ -813,39 +966,43 @@ function interpret(ast, sourceLines) {
             node.line,
           );
         }
+        const target = assignmentScope(node.name);
         switch (node.op) {
           case TT.EQ:
-            env[node.name] = rhs;
+            target[node.name] = rhs;
             break;
           case TT.PLUSEQ:
-            env[node.name] += rhs;
+            target[node.name] += rhs;
             break;
           case TT.MINUSEQ:
-            env[node.name] -= rhs;
+            target[node.name] -= rhs;
             break;
           case TT.STAREQ:
-            env[node.name] *= rhs;
+            target[node.name] *= rhs;
             break;
           case TT.SLASHEQ:
             if (rhs === 0)
               throw new RuntimeError("Division by zero", node.line);
-            env[node.name] = Math.trunc(env[node.name] / rhs);
+            target[node.name] = Math.trunc(target[node.name] / rhs);
             break;
           case TT.PERCENTEQ:
-            env[node.name] %= rhs;
+            if (rhs === 0) throw new RuntimeError("Modulo by zero", node.line);
+            target[node.name] %= rhs;
             break;
         }
         return env[node.name];
       }
 
       case "PostUpdate": {
+        const target = assignmentScope(node.name);
         const before = env[node.name] ?? 0;
-        env[node.name] = node.op === "++" ? before + 1 : before - 1;
+        target[node.name] = node.op === "++" ? before + 1 : before - 1;
         return before;
       }
 
       case "PreUpdate": {
-        env[node.name] =
+        const target = assignmentScope(node.name);
+        target[node.name] =
           (env[node.name] ?? 0) + (node.op === TT.PLUSPLUS ? 1 : -1);
         return env[node.name];
       }
@@ -858,13 +1015,15 @@ function interpret(ast, sourceLines) {
   // ── STATEMENT EXECUTOR ────────────────────────────────────
   function execStmt(node) {
     if (!node) return null;
+    tick(node.line ?? 1);
+    if (frames.length && node.line) frames.at(-1).line = node.line;
 
     switch (node.kind) {
       case "Program":
       case "Block": {
         for (const stmt of node.body) {
           const sig = execStmt(stmt);
-          if (sig === "return") return sig;
+          if (sig?.kind === "return") return sig;
         }
         return null;
       }
@@ -877,7 +1036,7 @@ function interpret(ast, sourceLines) {
             try {
               val = evalExpr(decl.init);
             } catch (e) {
-              addStep(decl.line, `⚠️ ${e.message}`);
+              reportError(e, decl.line);
               continue;
             }
           }
@@ -903,17 +1062,22 @@ function interpret(ast, sourceLines) {
               node.elements.length,
             );
           } catch (e) {
-            addStep(node.line, `⚠️ ${e.message}`);
+            reportError(e, node.line);
             return null;
           }
         }
 
+        if (!Number.isFinite(size) || size < 0 || size > MAX_ARRAY_SIZE) {
+          throw new ExecutionLimitError(`Array size must be between 0 and ${MAX_ARRAY_SIZE}`, node.line);
+        }
+        tick(node.line, size);
         const arr = [];
         for (let k = 0; k < size; k++) {
           if (k < node.elements.length) {
             try {
               arr.push(evalExpr(node.elements[k]));
-            } catch {
+            } catch (e) {
+              if (functions.size || e instanceof ExecutionLimitError) throw e;
               arr.push(0);
             }
           } else {
@@ -933,23 +1097,23 @@ function interpret(ast, sourceLines) {
       case "ExprStmt": {
         const { expr } = node;
         try {
-          const val = evalExpr(expr);
+          const val = evalExpr(expr, false);
           let note = "";
 
           if (expr.kind === "Assign") {
             note = `${expr.name} = ${fmt(env[expr.name])}`;
           } else if (expr.kind === "ArrayAssign") {
             const arr = env[expr.name];
-            const idx = Math.trunc(evalExpr(expr.index));
-            note = `${expr.name}[${idx}] = ${fmt(arr[idx])}  →  [${arr.join(", ")}]`;
+            // Do not evaluate the index twice: it may contain a function call.
+            note = `${expr.name}[${exprToString(expr.index)}] = ${fmt(val)}  →  [${arr.join(", ")}]`;
           } else if (expr.kind === "PostUpdate" || expr.kind === "PreUpdate") {
             note = `${expr.name} ${expr.op} → ${fmt(env[expr.name])}`;
           } else {
-            note = `→ ${fmt(val)}`;
+            note = val === undefined ? "→ Call completed" : `→ ${fmt(val)}`;
           }
           addStep(node.line, note);
         } catch (e) {
-          addStep(node.line, `⚠️ ${e.message}`);
+          reportError(e, node.line);
         }
         return null;
       }
@@ -960,7 +1124,7 @@ function interpret(ast, sourceLines) {
         try {
           condVal = evalExpr(node.condition);
         } catch (e) {
-          addStep(node.line, `⚠️ ${e.message}`);
+          reportError(e, node.line);
           return null;
         }
 
@@ -989,7 +1153,7 @@ function interpret(ast, sourceLines) {
           try {
             condVal = evalExpr(node.condition);
           } catch (e) {
-            addStep(node.line, `⚠️ ${e.message}`);
+            reportError(e, node.line);
             break;
           }
 
@@ -1010,7 +1174,7 @@ function interpret(ast, sourceLines) {
             break;
           }
           const sig = execStmt(node.body);
-          if (sig === "return") return sig;
+          if (sig?.kind === "return") return sig;
         }
         return null;
       }
@@ -1026,7 +1190,7 @@ function interpret(ast, sourceLines) {
             try {
               condVal = evalExpr(node.condition);
             } catch (e) {
-              addStep(node.line, `⚠️ ${e.message}`);
+              reportError(e, node.line);
               break;
             }
           }
@@ -1047,12 +1211,12 @@ function interpret(ast, sourceLines) {
             break;
           }
           const sig = execStmt(node.body);
-          if (sig === "return") return sig;
+          if (sig?.kind === "return") return sig;
           if (node.update) {
             try {
-              evalExpr(node.update);
+              evalExpr(node.update, false);
             } catch (e) {
-              addStep(node.line, `⚠️ ${e.message}`);
+              reportError(e, node.line);
               break;
             }
             addStep(node.line, buildUpdateNote(node.update));
@@ -1065,7 +1229,7 @@ function interpret(ast, sourceLines) {
       case "DoWhile": {
         let iters = 0;
         const condSrc = exprToString(node.condition);
-        do {
+        for (;;) {
           if (++iters > MAX_ITER) {
             addStep(
               node.line,
@@ -1074,12 +1238,12 @@ function interpret(ast, sourceLines) {
             break;
           }
           const sig = execStmt(node.body);
-          if (sig === "return") return sig;
+          if (sig?.kind === "return") return sig;
           let condVal;
           try {
             condVal = evalExpr(node.condition);
           } catch (e) {
-            addStep(node.line, `⚠️ ${e.message}`);
+            reportError(e, node.line);
             break;
           }
           addStep(
@@ -1087,7 +1251,7 @@ function interpret(ast, sourceLines) {
             `do-while (${condSrc}) → ${condVal ? "TRUE ✓ — continue" : "FALSE ✗ — exit loop"}`,
           );
           if (!condVal) break;
-        } while (true);
+        }
         return null;
       }
 
@@ -1095,12 +1259,23 @@ function interpret(ast, sourceLines) {
       case "Printf": {
         let output = node.fmt.replace(/\\n/g, "↵").replace(/\\t/g, "→");
 
+        // All arguments execute exactly once, even if the format omits one.
+        const values = node.args.map((arg) => {
+          try {
+            return evalExpr(arg);
+          } catch (e) {
+            if (functions.size || e instanceof ExecutionLimitError) throw e;
+            return undefined;
+          }
+        });
+
         let argIdx = 0;
         output = output.replace(/%[difc s%]/g, (spec) => {
           if (spec === "%%") return "%";
           if (argIdx >= node.args.length) return spec;
           try {
-            const val = evalExpr(node.args[argIdx++]);
+            const val = values[argIdx++];
+            if (val === undefined) return "?";
             if (spec === "%c") return String.fromCharCode(val);
             if (spec === "%f") return val.toFixed(6);
             return String(Math.trunc(val));
@@ -1115,17 +1290,25 @@ function interpret(ast, sourceLines) {
 
       // ── Return ────────────────────────────────────────────
       case "Return": {
-        let val = 0;
+        const fn = frames.at(-1)?.fn;
+        if (fn && ((fn.returnType === "void" && node.value) ||
+          (fn.returnType === "int" && !node.value))) {
+          throw new RuntimeError(fn.returnType === "void"
+            ? `Void function "${fn.name}" cannot return a value`
+            : `Function "${fn.name}" must return a value`, node.line);
+        }
+        let val = fn?.returnType === "void" ? undefined : 0;
         if (node.value) {
           try {
             val = evalExpr(node.value);
           } catch (e) {
-            addStep(node.line, `⚠️ ${e.message}`);
-            return "return";
+            reportError(e, node.line);
+            return { kind: "return", value: 0 };
           }
         }
-        addStep(node.line, `↩ return ${fmt(val)}`);
-        return "return";
+        if (fn?.returnType === "int") val = Math.trunc(val);
+        addStep(node.line, val === undefined ? "↩ return" : `↩ return ${fmt(val)}`);
+        return { kind: "return", value: val };
       }
 
       default:
@@ -1133,7 +1316,30 @@ function interpret(ast, sourceLines) {
     }
   }
 
-  execStmt(ast);
+  try {
+    for (const node of ast.body) {
+      if (node.kind !== "FunctionDecl") continue;
+      if (functions.has(node.name)) {
+        throw new RuntimeError(`Duplicate function "${node.name}"`, node.line);
+      }
+      functions.set(node.name, node);
+    }
+    if (functions.size) {
+      if (!functions.has("main")) throw new RuntimeError("Function definitions require main()", 1);
+      const declarations = ast.body.filter((node) => node.kind !== "FunctionDecl");
+      for (const node of declarations) {
+        if (!["VarDeclList", "ArrayDecl"].includes(node.kind)) {
+          throw new RuntimeError("Only global declarations are allowed outside functions", node.line);
+        }
+      }
+      for (const node of declarations) execStmt(node);
+      callFunction("main", [], functions.get("main").line, false, true);
+    } else {
+      execStmt(ast);
+    }
+  } catch (error) {
+    steps.push(error.step ?? snapshot(error.line ?? 1, `⚠️ ${error.message}`));
+  }
   return steps;
 }
 
@@ -1148,6 +1354,8 @@ class RuntimeError extends Error {
   }
 }
 
+class ExecutionLimitError extends RuntimeError {}
+
 function fmt(val) {
   if (Array.isArray(val)) return `[${val.join(", ")}]`;
   if (Number.isInteger(val)) return String(val);
@@ -1161,6 +1369,8 @@ function exprToString(node) {
       return String(node.value);
     case "Identifier":
       return node.name;
+    case "Call":
+      return `${node.name}(${node.args.map(exprToString).join(", ")})`;
     case "ArrayAccess":
       return `${node.name}[${exprToString(node.index)}]`;
     case "ArrayAssign":
@@ -1211,6 +1421,7 @@ export function runCInterpreter(code) {
         line: 1,
         code: sourceLines[0] ?? "",
         variables: {},
+        callStack: [],
         note: `⚠️ Parse error: ${e.message}`,
       },
     ];

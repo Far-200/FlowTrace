@@ -75,6 +75,47 @@ body {
 }
 
 /* ── Buttons ── */
+.call-stack {
+  flex-shrink: 0;
+}
+.call-stack-body {
+  padding: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.call-stack-frames {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.call-stack-frame {
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 10px;
+  background: #111827;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.call-stack-frame.active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+.call-stack-title,
+.call-stack-values > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.call-stack-title { color: #93c5fd; }
+.call-stack-status { color: #9ca3af; font-size: 10px; margin: 5px 0 8px; }
+.call-stack-frame.active .call-stack-status { color: #60a5fa; }
+.call-stack-values { display: grid; gap: 5px; }
+.call-stack-values dt { color: #a78bfa; }
+.call-stack-values dd { color: #34d399; text-align: right; }
+.call-stack-values small { color: #9ca3af; font-size: 9px; }
+.call-stack-empty { color: #6b7280; font-size: 11px; line-height: 1.6; }
+
 .btn {
   border: none;
   cursor: pointer;

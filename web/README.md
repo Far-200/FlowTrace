@@ -238,10 +238,9 @@ FlowTrace is a **simulation engine**, not a real C compiler. It is intentionally
 **Not supported (yet):**
 
 - Pointers and pointer arithmetic (`*`, `&`)
-- Arrays and array indexing
-- User-defined functions and call stacks
 - Structs and unions
 - Dynamic memory (`malloc`, `free`)
+- Function prototypes (forward declarations without a body) and array parameters
 - Standard library calls (`scanf`, `fgets`, `math.h`, etc.)
 - Preprocessor directives (`#define`, `#ifdef`)
 - Multi-file programs
@@ -255,8 +254,8 @@ If you paste a program that uses unsupported features, FlowTrace will either ski
 
 **Near-term:**
 
-- [ ] Array support (`int arr[5]`, indexing, iteration)
-- [ ] User-defined functions with a visible call stack panel
+- [x] Array support (`int arr[5]`, indexing, iteration)
+- [x] User-defined functions with a visible call stack panel
 - [ ] Execution speed control (slow / normal / fast)
 - [ ] Breakpoints — click a line number to pause there
 

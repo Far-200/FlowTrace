@@ -1,8 +1,7 @@
 // src/components/MobileTabs.jsx
 // ─────────────────────────────────────────────────────────────
 // WHY THIS FILE EXISTS:
-// On mobile, the three right-column panels (Current Step,
-// Variables, Trace Log) can't sit side-by-side.
+// On mobile, the right-column panels share a tabbed area.
 // This tab bar lets users switch between them one at a time.
 // Only rendered on mobile — desktop layout is unchanged.
 // ─────────────────────────────────────────────────────────────
@@ -10,6 +9,7 @@
 const TABS = [
   { id: "step", label: "Step", icon: "⚡" },
   { id: "variables", label: "Variables", icon: "📦" },
+  { id: "stack", label: "Stack", icon: "▤" },
   { id: "trace", label: "Trace", icon: "📜" },
 ];
 
@@ -47,7 +47,7 @@ export default function MobileTabs({
             onClick={() => onTabChange(tab.id)}
             style={{
               flex: 1,
-              padding: "12px 8px",
+              padding: "12px 4px",
               background: "transparent",
               border: "none",
               borderBottom: isActive
@@ -61,7 +61,7 @@ export default function MobileTabs({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 6,
+              gap: 4,
               transition: "all 0.15s",
               WebkitTapHighlightColor: "transparent",
             }}
