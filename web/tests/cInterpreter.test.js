@@ -4,6 +4,154 @@ import { runCInterpreter as run } from "../src/engine/interpreters/cInterpreter.
 import { generateSteps } from "../src/engine/generateSteps.js";
 import { SAMPLES } from "../src/data/samples.js";
 
+test("scalar writes reject undeclared and array targets without mutation", () => {
+  const expressions = ["x = 2", "x += 2", "x -= 2", "x *= 2", "x /= 2", "x %= 2",
+    "x++", "x--", "++x", "--x"];
+  for (const declaration of ["", "int x[1] = {4};"]) {
+    for (const expression of expressions) {
+      const steps = run(`int main() { ${declaration} ${expression}; int after=1; }`);
+      const end = steps.at(-1);
+      assert.match(end.note, declaration ? /scalar/ : /Undeclared variable/, expression);
+      assert.deepEqual(end.variables, declaration ? { x: [4] } : {}, expression);
+      assert.equal(steps.filter((s) => s.note.startsWith("⚠️")).length, 1);
+      assert.deepEqual(end.callStack.map((f) => f.functionName), ["main"]);
+    }
+  }
+});
+
+test("invalid scalar targets are rejected before side-effecting RHS calls", () => {
+  for (const declaration of ["", "int x[1]={4};"]) {
+    for (const op of ["=", "+=", "-=", "*=", "/=", "%="]) {
+      const steps = run(`int hits=0; int bump(){hits++;return 2;}
+        int main(){${declaration} x ${op} bump();}`);
+      assert.match(steps.at(-1).note, declaration ? /scalar/ : /Undeclared variable/);
+      assert.equal(steps.at(-1).variables.hits, 0);
+      assert.ok(!steps.some((s) => s.note.includes("Enter bump")));
+    }
+  }
+});
+
+test("valid scalar writes preserve locals, parameters, globals and update values", () => {
+  const steps = successful(`int g=1;
+    int f(int x){
+      x=4; x+=3; x-=1; x*=2; x/=3; x%=3;
+      int a=x++; int b=x--; int c=++x; int d=--x;
+      g+=x; g++; --g;
+      return a*1000+b*100+c*10+d;
+    }
+    int main(){int g=9; int result=f(99); return result+g;}`);
+  assert.match(steps.at(-1).note, /main returned 1230/);
+  assert.equal(steps.at(-1).variables.g, 2);
+});
+
+test("array-element writes still evaluate index and RHS calls once", () => {
+  const steps = successful(`int hits=0;
+    int index(){hits++;return 0;} int value(){hits++;return 8;}
+    int main(){int a[1]={1}; a[index()]=value();
+      a[0]+=2; a[0]-=1; a[0]*=2; a[0]/=3; a[0]%=4;
+      return a[0];}`);
+  assert.match(steps.at(-1).note, /main returned 2/);
+  assert.equal(steps.at(-1).variables.hits, 2);
+});
+
+test("snippet scalar validation preserves error recovery without creating bindings", () => {
+  const steps = run("int hits=0; missing=(hits=1); int a[1]={4}; a++; int after=2;");
+  assert.equal(steps.filter((s) => s.note.startsWith("⚠️")).length, 2);
+  assert.deepEqual(steps.at(-1).variables, { hits: 0, a: [4], after: 2 });
+});
+
+test("logical precedence controls side effects and explicit parentheses win", () => {
+  for (const [expr, result, hits] of [
+    ["1 || 0 && f()", 1, 0], ["(1 || 0) && f()", 0, 1],
+    ["1 || (0 && f())", 1, 0], ["0 && f() || 1", 1, 0],
+    ["0 && (f() || 1)", 0, 0],
+  ]) {
+    const steps = successful(`int hits=0; int f(){hits++;return 0;}
+      int main(){return ${expr};}`);
+    assert.match(steps.at(-1).note, new RegExp(`main returned ${result} `), expr);
+    assert.equal(steps.at(-1).variables.hits, hits, expr);
+  }
+});
+
+test("relational precedence exceeds equality and equality exceeds logical operators", () => {
+  for (const [expr, result, hits] of [
+    ["f() == 1 < 1", 0, 1], ["(f() == 1) < 1", 1, 1],
+    ["f() == (1 < 1)", 0, 1], ["f() != 1 <= 1", 1, 1],
+    ["f() == 1 > 0", 0, 1], ["f() != 1 >= 0", 1, 1],
+    ["f() == 1 < 1 && f()", 0, 1], ["(f() == 1) < 1 && f()", 1, 2],
+    ["0 && f() == 0", 0, 0], ["1 || f() == 0", 1, 0],
+  ]) {
+    const steps = successful(`int hits=0; int f(){hits++;return 2;}
+      int main(){return ${expr};}`);
+    assert.match(steps.at(-1).note, new RegExp(`main returned ${result} `), expr);
+    assert.equal(steps.at(-1).variables.hits, hits, expr);
+  }
+});
+
+test("prefix updates compose at unary precedence and retain expression values", () => {
+  for (const [expr, result, x] of [
+    ["++x + 1", 3, 2], ["1 + ++x", 3, 2], ["--x + 3", 3, 0],
+    ["3 + --x", 3, 0], ["++x * 3", 6, 2], ["++x == 2", 1, 2],
+    ["2 > --x", 1, 0], ["f(++x + 1)", 3, 2], ["f(3 + --x)", 3, 0],
+  ]) {
+    const steps = successful(`int f(int n){return n;}
+      int main(){int x=1; int result=${expr}; return result;}`);
+    assert.equal(steps.at(-2).variables.x, x, expr);
+    assert.match(steps.at(-1).note, new RegExp(`main returned ${result} `), expr);
+  }
+  assert.match(successful("int main(){int x=1; ++x; --x; return x;}").at(-1).note,
+    /main returned 1/);
+});
+
+test("prefix and postfix non-identifier targets fail before any execution", () => {
+  for (const op of ["++", "--"]) {
+    for (const target of ["f()", "a[0]", "(x+1)", "5", "x++"]) {
+      for (const expr of [`${op}${target}`, `${target}${op}`]) {
+        const steps = run(`int hits=0; int f(){hits++;return 1;}
+          int main(){int a[1]={4};int x=1;${expr};}`);
+        assert.equal(steps.length, 1, expr);
+        assert.match(steps[0].note, /Parse error/, expr);
+        assert.deepEqual(steps[0].variables, {}, expr);
+        assert.deepEqual(steps[0].callStack, [], expr);
+      }
+    }
+  }
+});
+
+const infiniteLoops = ["while(1) {}", "for(;;) {}", "for(int i=0;1;i++) {}", "do {} while(1);"];
+
+test("function loop limits are fatal and retain the deepest diagnostic frame", () => {
+  for (const loop of infiniteLoops) {
+    const steps = run(`int f(){int marker=42; ${loop} int after=1; return 7;}
+      int wrapper(){return f();} int main(){return wrapper();}`);
+    const end = steps.at(-1);
+    assert.match(end.note, /Loop exceeded 100 iterations/, loop);
+    assert.equal(steps.filter((s) => s.note.startsWith("⚠️")).length, 1);
+    assert.deepEqual(end.callStack.map((f) => f.functionName), ["main", "wrapper", "f"]);
+    assert.equal(end.callStack.at(-1).locals.marker, 42);
+    assert.ok(!steps.some((s) => Object.hasOwn(s.variables, "after")));
+    assert.ok(!steps.some((s) => /↩|resume|execution complete/.test(s.note)));
+  }
+  assert.match(successful("int main(){return 2;}").at(-1).note, /main returned 2/);
+});
+
+test("snippet loop limits retain warning-and-break compatibility", () => {
+  for (const loop of infiniteLoops) {
+    const steps = run(`${loop} int after=7;`);
+    assert.equal(steps.filter((s) => s.note.startsWith("⚠️")).length, 1);
+    assert.match(steps.find((s) => s.note.startsWith("⚠️")).note, /Loop exceeded 100/);
+    assert.equal(steps.at(-1).variables.after, 7);
+    assert.ok(steps.every((s) => s.callStack.length === 0));
+  }
+});
+
+test("finite function loops still finish at the iteration limit", () => {
+  for (const loop of ["while(i<100){i++;}", "for(;i<100;i++){}", "do{i++;}while(i<100);"]) {
+    const steps = successful(`int f(){int i=0;${loop}return i;} int main(){return f();}`);
+    assert.match(steps.at(-1).note, /main returned 100/);
+  }
+});
+
 function successful(code) {
   const steps = run(code);
   assert.ok(steps.length);

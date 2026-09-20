@@ -521,13 +521,6 @@ function parse(tokens) {
   function parseAssignment() {
     const line = peek().line;
 
-    // Pre-increment/decrement: ++x  --x
-    if (check(TT.PLUSPLUS) || check(TT.MINUSMINUS)) {
-      const op = advance().type;
-      const name = expect(TT.IDENT, "Expected variable after prefix op").value;
-      return { kind: "PreUpdate", op, name, line };
-    }
-
     // ── Array element assignment: arr[i] = expr ──────────────
     if (check(TT.IDENT) && tokens[pos + 1]?.type === TT.LBRACKET) {
       const start = pos;
@@ -571,12 +564,32 @@ function parse(tokens) {
       }
     }
 
-    return parseLogical();
+    return parseLogicalOr();
   }
 
-  function parseLogical() {
+  function parseLogicalOr() {
+    let left = parseLogicalAnd();
+    while (check(TT.PIPEPIPE)) {
+      const op = advance().value;
+      const right = parseLogicalAnd();
+      left = { kind: "Binary", op, left, right, line: left.line };
+    }
+    return left;
+  }
+
+  function parseLogicalAnd() {
+    let left = parseEquality();
+    while (check(TT.AMPAMP)) {
+      const op = advance().value;
+      const right = parseEquality();
+      left = { kind: "Binary", op, left, right, line: left.line };
+    }
+    return left;
+  }
+
+  function parseEquality() {
     let left = parseComparison();
-    while (check(TT.AMPAMP) || check(TT.PIPEPIPE)) {
+    while (check(TT.EQEQ) || check(TT.BANGEQ)) {
       const op = advance().value;
       const right = parseComparison();
       left = { kind: "Binary", op, left, right, line: left.line };
@@ -587,8 +600,6 @@ function parse(tokens) {
   function parseComparison() {
     let left = parseAddSub();
     const cmpOps = new Set([
-      TT.EQEQ,
-      TT.BANGEQ,
       TT.LT,
       TT.GT,
       TT.LTEQ,
@@ -624,6 +635,14 @@ function parse(tokens) {
 
   function parseUnary() {
     const line = peek().line;
+    if (check(TT.PLUSPLUS) || check(TT.MINUSMINUS)) {
+      const op = advance().type;
+      const target = parseUnary();
+      if (target.kind !== "Identifier") {
+        throw new ParseError(`Line ${line}: "${op}" requires a variable, not an expression`);
+      }
+      return { kind: "PreUpdate", op, name: target.name, line };
+    }
     if (check(TT.MINUS)) {
       advance();
       return { kind: "Unary", op: "-", expr: parseUnary(), line };
@@ -776,8 +795,21 @@ function interpret(ast, sourceLines) {
     addStep(line, `⚠️ ${error.message}`);
   }
 
-  function assignmentScope(name) {
-    return Object.hasOwn(env, name) || !Object.hasOwn(globals, name) ? env : globals;
+  function scalarAssignmentScope(name, line) {
+    const scope = Object.hasOwn(env, name) ? env : globals;
+    if (!Object.hasOwn(scope, name)) {
+      throw new RuntimeError(`Undeclared variable "${name}"`, line);
+    }
+    if (typeof scope[name] !== "number") {
+      throw new RuntimeError(`"${name}" is not a scalar variable`, line);
+    }
+    return scope;
+  }
+
+  function stopAtLoopLimit(line) {
+    const message = `Loop exceeded ${MAX_ITER} iterations — stopped`;
+    if (functions.size) throw new ExecutionLimitError(message, line);
+    addStep(line, `⚠️ ${message}`);
   }
 
   function callFunction(name, args, line, needsValue, isEntryCall = false) {
@@ -959,14 +991,9 @@ function interpret(ast, sourceLines) {
       }
 
       case "Assign": {
+        // Reject invalid storage before the RHS can execute side effects.
+        const target = scalarAssignmentScope(node.name, node.line);
         const rhs = evalExpr(node.value);
-        if (!(node.name in env) && node.op !== TT.EQ) {
-          throw new RuntimeError(
-            `Undeclared variable "${node.name}"`,
-            node.line,
-          );
-        }
-        const target = assignmentScope(node.name);
         switch (node.op) {
           case TT.EQ:
             target[node.name] = rhs;
@@ -994,16 +1021,16 @@ function interpret(ast, sourceLines) {
       }
 
       case "PostUpdate": {
-        const target = assignmentScope(node.name);
-        const before = env[node.name] ?? 0;
+        const target = scalarAssignmentScope(node.name, node.line);
+        const before = target[node.name];
         target[node.name] = node.op === "++" ? before + 1 : before - 1;
         return before;
       }
 
       case "PreUpdate": {
-        const target = assignmentScope(node.name);
+        const target = scalarAssignmentScope(node.name, node.line);
         target[node.name] =
-          (env[node.name] ?? 0) + (node.op === TT.PLUSPLUS ? 1 : -1);
+          target[node.name] + (node.op === TT.PLUSPLUS ? 1 : -1);
         return env[node.name];
       }
 
@@ -1167,10 +1194,7 @@ function interpret(ast, sourceLines) {
           );
           if (!condVal) break;
           if (++iters > MAX_ITER) {
-            addStep(
-              node.line,
-              `⚠️ Loop exceeded ${MAX_ITER} iterations — stopped`,
-            );
+            stopAtLoopLimit(node.line);
             break;
           }
           const sig = execStmt(node.body);
@@ -1204,10 +1228,7 @@ function interpret(ast, sourceLines) {
           );
           if (!condVal) break;
           if (++iters > MAX_ITER) {
-            addStep(
-              node.line,
-              `⚠️ Loop exceeded ${MAX_ITER} iterations — stopped`,
-            );
+            stopAtLoopLimit(node.line);
             break;
           }
           const sig = execStmt(node.body);
@@ -1231,10 +1252,7 @@ function interpret(ast, sourceLines) {
         const condSrc = exprToString(node.condition);
         for (;;) {
           if (++iters > MAX_ITER) {
-            addStep(
-              node.line,
-              `⚠️ Loop exceeded ${MAX_ITER} iterations — stopped`,
-            );
+            stopAtLoopLimit(node.line);
             break;
           }
           const sig = execStmt(node.body);
