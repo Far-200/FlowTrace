@@ -63,10 +63,10 @@ export default function VariablesPanel({ currentStep, prevStep }) {
   }, [currentStep]);
 
   return (
-    <div className="panel" style={{ flex: 1 }}>
+    <div className="panel inspector-panel variables-panel">
       <div className="panel-header">
         <span>📦 Variables</span>
-        <span style={{ color: "#3b82f6", fontSize: 10 }}>
+        <span className="panel-count">
           {varNames.length} active
         </span>
       </div>
@@ -81,14 +81,14 @@ export default function VariablesPanel({ currentStep, prevStep }) {
               justifyContent: "center",
               padding: "16px 0",
               gap: 6,
-              color: "#374151",
+              color: "#94a3b8",
             }}
           >
             <span style={{ fontSize: 18, opacity: 0.3 }}>{}</span>
             <span style={{ fontSize: 11 }}>No variables declared yet</span>
           </div>
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap" }}>
+          <div className="variable-grid">
             {varNames.map((name) => {
               const val = currentStep.variables[name];
               const prevVal = scopeId(currentStep) === scopeId(prevStep)
@@ -156,7 +156,7 @@ function VarPill({ name, val, prevVal, changed, history }) {
         <span
           style={{
             fontSize: 9,
-            color: "#374151",
+            color: "#a8b7cc",
             background: "#1f2937",
             borderRadius: 3,
             padding: "1px 4px",
@@ -168,8 +168,20 @@ function VarPill({ name, val, prevVal, changed, history }) {
       </div>
 
       {/* Value + delta row */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <span className="var-val">{formatVal(val)}</span>
+      <div className="variable-value-row">
+        {Array.isArray(val) ? (
+          <details className="array-disclosure">
+            <summary>
+              <span className="var-val compact-preview">[{val.slice(0, 4).join(", ")}{val.length > 4 ? ", …" : ""}]</span>
+              <span className="disclosure-label">{val.length} elements · inspect <span aria-hidden="true">⌄</span></span>
+            </summary>
+            <ol className="array-elements" aria-label={`${name} elements`}>
+              {val.map((value, index) => (
+                <li key={index}><span>[{index}]</span><span>{formatVal(value)}</span></li>
+              ))}
+            </ol>
+          </details>
+        ) : <span className="var-val">{formatVal(val)}</span>}
         {delta !== null && (
           <span
             style={{

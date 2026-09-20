@@ -251,6 +251,7 @@ export default function App() {
 
           {/* Right: panels */}
           <div
+            className="inspector-sidebar"
             style={{
               width: isTablet ? 240 : 280,
               display: "flex",
@@ -263,7 +264,7 @@ export default function App() {
             <CurrentStepPanel {...panelProps} />
             <VariablesPanel {...panelProps} />
             <CallStackPanel currentStep={currentStep} />
-            <TraceLog varHistory={varHistory} />
+            <TraceLog varHistory={varHistory} steps={steps} />
           </div>
         </div>
 
@@ -349,7 +350,7 @@ export default function App() {
         {mobileTab === "step" && <CurrentStepPanel {...panelProps} />}
         {mobileTab === "variables" && <VariablesPanel {...panelProps} />}
         {mobileTab === "stack" && <CallStackPanel currentStep={currentStep} />}
-        {mobileTab === "trace" && <TraceLog varHistory={varHistory} />}
+        {mobileTab === "trace" && <TraceLog varHistory={varHistory} steps={steps} />}
       </div>
 
       {/* ── Fixed bottom controls ───────────────────────────── */}
